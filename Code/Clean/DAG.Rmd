@@ -1,0 +1,43 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(dagitty)
+```
+
+```{r}
+# Define the DAG
+mydag <- dagitty('dag {
+  "Average Close Price" [pos="0.871,0.782"];
+  "CEO Dismissal" [outcome,pos="1.021,-0.314"];
+  "Company Size" [pos="1.017,-1.515"];
+  "Earnings Per Share" [exposure,pos="-1.587,-0.314"];
+  "Industry Type" [pos="-0.356,-1.465"];
+  "Interest Rate" [pos="-0.294,1.432"];
+  "Previous CEO Dismissal" [pos="-1.487,-1.415"];
+  "Public Sentiment" [pos="-1.404,0.693"];
+  "Average Close Price" -> "CEO Dismissal";
+  "Average Close Price" -> "Earnings Per Share";
+  "Company Size" -> "CEO Dismissal";
+  "Company Size" -> "Earnings Per Share";
+  "Earnings Per Share" -> "CEO Dismissal";
+  "Industry Type" -> "CEO Dismissal";
+  "Industry Type" -> "Company Size";
+  "Industry Type" -> "Earnings Per Share";
+  "Interest Rate" -> "Average Close Price";
+  "Interest Rate" -> "CEO Dismissal";
+  "Interest Rate" -> "Company Size";
+  "Interest Rate" -> "Earnings Per Share";
+  "Interest Rate" -> "Public Sentiment";
+  "Previous CEO Dismissal" -> "CEO Dismissal";
+  "Previous CEO Dismissal" -> "Earnings Per Share";
+  "Public Sentiment" -> "Average Close Price";
+  "Public Sentiment" -> "Earnings Per Share";
+}')
+
+# Plot the DAG
+plot(mydag)
+```
+
