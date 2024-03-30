@@ -1,0 +1,21 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+# Import library
+library(xtable)
+
+# Import data
+df <- read.csv("Dismissal-and-Financial-Data-clean.csv")
+df
+
+# Variables of interest in the data set
+non_char_cols <- sapply(df, function(x) !is.character(x))
+non_char_df <- df[, non_char_cols]
+
+summary < - summary(non_char_df)
+
+print(xtable(summary), type="latex", file="summary.tex", include.rownames=FALSE)
+```
