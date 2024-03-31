@@ -1,0 +1,147 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(dplyr)
+library(psych)
+library(stargazer)
+library(xtable)
+library(Hmisc)
+library(broom)
+library(tidyverse)
+library(haven)
+library(estimatr)
+library(plm)
+library(TTR)
+library(MASS)
+```
+
+
+```{r}
+# Load the data
+df <- read.csv('final_dataset_mine.csv')
+df
+df <- subset(df,select = -c(X10.Year.Treasury.Yield,X3.Month.Treasury.Yield..Bond.Equivalent.Basis.))
+df <- 
+stargazer(df)
+```
+```{r}
+# Filter and group the data 
+df_new <- df %>% 
+  filter(CRSP.Ticker != "PHM") %>% 
+  group_by(CRSP.Ticker) %>%
+  arrange(CRSP.Ticker, Fiscal.Quarter) %>% 
+  mutate(lag_RET = lag(EPS.Basic, n = 1)) %>% 
+  mutate(lag_mean = runMean(x = lag_RET, n = 4, cumulative = TRUE)) %>% # Calculate the running mean of the lagged EPS
+  mutate(treatment = ifelse(lag_mean > lag_RET, 1, 0)) # Create the 'treatment' column based on condition
+summary(df_new)
+```
+
+
+```{r}
+# First, let's see how does the ordinary model perform
+ordinary_model <- glm(CEO.Dismissal ~ treatment + Net.Income + Operating.Income + X3.Month.Treasury.Yield + Adjusted.Close + Recession, data = df_new, family = binomial)
+stargazer(ordinary_model,report=('vc*s'))
+summary(ordinary_model)
+```
+
+
+
+
+```{r}
+# Assuming your dataframe is named 'your_data'
+time_lagged_df <- df_new %>%
+  arrange(CRSP.Ticker, Fiscal.Quarter) %>%
+  group_by(CRSP.Ticker) %>%
+  mutate(treatment = lag(ifelse(EPS.Basic
+ < mean(EPS.Basic), 1, 0)),
+         Net_Income_Lagged = lag(Net.Income),
+         Adjusted_Close_Price_Lagged = lag(Adjusted.Close),
+         EPS_Lagged = lag(EPS.Basic),
+         Operating_Income_Lagged = lag(Operating.Income))
+time_lagged_df
+
+# Logistic regression model
+#CEO.Dismissal ~ treatment + Net.Income + Operating.Income + X3.Month.Treasury.Yield + Adjusted.Close
+forward_model <- glm(CEO.Dismissal ~ treatment + Net_Income_Lagged + 
+                     Operating_Income_Lagged + X3.Month.Treasury.Yield + Adjusted_Close_Price_Lagged, 
+                   data = time_lagged_df, 
+                   family = binomial)
+summary(forward_model)
+stargazer(forward_model,report=('vc*s'))
+```
+
+
+```{r}
+# Random effects logistic model to account for in-sector covariance 
+install.packages("Matrix")
+install.packages("lme4", type = "source")
+library(Matrix)
+library(lme4)
+df_new$GICS.Sector <- as.factor(df_new$GICS.Sector)
+df_new$CRSP.Ticker <- as.factor(df_new$CRSP.Ticker)
+df_new
+# Fit the mixed-effects logistic regression model
+mixed_model_2 <- glmer(CEO.Dismissal ~ treatment + Net.Income + Operating.Income + X3.Month.Treasury.Yield + Adjusted.Close + Recession + (1 | GICS.Sector), 
+               data = df_new, 
+               family = binomial(link = "logit"))
+# Display the summary of the model
+summary(mixed_model_2)
+stargazer(mixed_model_2,report=('vc*s'))
+# Capture the coefficients in a dataframe
+model_summary <- summary(model)
+coefs <- as.data.frame(model_summary$coefficients)
+
+# Fix the names for the DataViz
+new_names <- c("Intercept", "Treatment", "Net Income", "Operating Income", "Quarterly Interest Rate", "Quarterly Adjusted Close", "Recession")
+
+# Assign new names to rownames
+rownames(coefs) <- new_names
+
+# Plot the coefficients
+ggplot(coefs, aes(x = rownames(coefs), y = Estimate, fill = `Std. Error`)) +
+  geom_bar(stat = "identity", color = "black") +
+  geom_errorbar(aes(ymin = Estimate - `Std. Error`, ymax = Estimate + `Std. Error`), width = 0.2) +
+  coord_flip() +
+  labs(title = "Coefficients of Mixed-Effects Logistic Regression Model",
+       x = "Variable",
+       y = "Estimate") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 8)) +
+  scale_fill_gradient(low = "white", high = "black")
+
+probabilities <- predict(model, type="response")
+probabilities <- probabilities[1:nrow(df_new)]
+
+# Create a dataframe with predicted probabilities and actual CEO dismissal outcomes
+prediction_data <- data.frame(probabilities = probabilities, CEO_dismissal = df_new$CEO.Dismissal)
+
+# Plot histogram of predicted probabilities with actual outcomes overlayed
+ggplot(prediction_data, aes(x = probabilities, fill = factor(CEO_dismissal))) +
+  geom_histogram(binwidth = 0.003, alpha = 0.8, position = "identity") +  # Adding edge color
+  scale_fill_manual(values = c("grey", "black"), labels = c("No Dismissal", "Dismissal")) +
+  labs(title = "Distribution of Predicted Probabilities for CEO Dismissal",
+       x = "Predicted Probability of CEO Dismissal",
+       y = "Frequency") +
+  theme_minimal()
+```
+
+```{r}
+# Remove missing values
+prediction_data <- prediction_data[complete.cases(prediction_data), ]
+
+# Calculate mean probability of CEO dismissal given data and confidence intervals
+prediction_data_summary <- prediction_data %>%
+  group_by(CEO_dismissal) %>%
+  summarise(mean_prob = median(probabilities, na.rm = TRUE),
+            lower_ci = quantile(probabilities, 0.025, na.rm = TRUE),
+            upper_ci = quantile(probabilities, 0.975, na.rm = TRUE))
+prediction_data_summary
+stargazer(prediction_data_summary)
+```
+
+
+
+
